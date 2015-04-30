@@ -23,6 +23,11 @@
  */
 - (void)payWithOrder:(Order *)aOrder;
 
+- (void)payWithOrder:(Order *)aOrder success:(void(^)(void))success failed:(void(^)(void))failed;
+
+- (void)payWithOrder:(Order *)aOrder localSign:(BOOL)sign;
+
+- (void)payWithOrder:(Order *)aOrder localSign:(BOOL)sign success:(void(^)(void))success failed:(void(^)(void))failed;
 /**
  *  处理支付宝客户端回调
  *

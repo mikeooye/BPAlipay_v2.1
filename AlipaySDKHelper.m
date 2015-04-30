@@ -14,6 +14,12 @@
 #import <UIKit/UIKit.h>
 
 
+@interface AlipaySDKHelper ()
+
+@property (copy, nonatomic) void (^successHandler)(void);
+@property (copy, nonatomic) void (^failedHandler)(void);
+@end
+
 @implementation AlipaySDKHelper
 
 + (instancetype)allocWithZone:(struct _NSZone *)zone
@@ -41,7 +47,7 @@
 }
 
 #pragma mark - Pay
-- (void)payWithOrder:(Order *)aOrder
+- (void)payWithOrder:(Order *)aOrder localSign:(BOOL)sign
 {
     if (aOrder && aOrder.tradeNO.length && aOrder.productName.length && aOrder.productDescription.length) {
         
@@ -72,20 +78,28 @@
         //将商品信息拼接成字符串
         NSString *orderSpec = [aOrder description];
         NSLog(@"orderSpec = %@",orderSpec);
-        
-        //获取私钥并将商户信息签名,外部商户可以根据情况存放私钥和签名,只需要遵循RSA签名规范,并将签名字符串base64编码和UrlEncode
-        id<DataSigner> signer = CreateRSADataSigner(alipay_private_key);
-        NSString *signedString = [signer signString:orderSpec];
-        
-        //将签名成功字符串格式化为订单字符串,请严格按照该格式
         NSString *orderString = nil;
         
-        if (signedString != nil) {
-            orderString = [NSString stringWithFormat:@"%@&sign=\"%@\"&sign_type=\"%@\"",
-                           orderSpec, signedString, @"RSA"];
-            NSLog(@"%@",orderString);
+        if (sign == YES) {
             
+            //获取私钥并将商户信息签名,外部商户可以根据情况存放私钥和签名,只需要遵循RSA签名规范,并将签名字符串base64编码和UrlEncode
+            id<DataSigner> signer = CreateRSADataSigner(alipay_private_key);
+            NSString *signedString = [signer signString:orderSpec];
+            
+            //将签名成功字符串格式化为订单字符串,请严格按照该格式
+            
+            
+            if (signedString != nil) {
+                orderString = [NSString stringWithFormat:@"%@&sign=\"%@\"&sign_type=\"%@\"",
+                               orderSpec, signedString, @"RSA"];
+                NSLog(@"%@",orderString);
+                
+            }
+        }else{
+            
+            orderString = orderSpec;
         }
+        
         
         __weak typeof(self) weakSelf = self;
         [[AlipaySDK defaultService] payOrder:orderString fromScheme:appScheme callback:^(NSDictionary *resultDic) {
@@ -94,6 +108,23 @@
             [weakSelf handleResult:resultDic];
         }];
     }
+}
+
+- (void)payWithOrder:(Order *)aOrder
+{
+    [self payWithOrder:aOrder localSign:YES];
+}
+
+- (void)payWithOrder:(Order *)aOrder localSign:(BOOL)sign success:(void (^)(void))success failed:(void (^)(void))failed
+{
+    self.successHandler = success;
+    self.failedHandler = failed;
+    [self payWithOrder:aOrder localSign:sign];
+}
+
+- (void)payWithOrder:(Order *)aOrder success:(void (^)(void))success failed:(void (^)(void))failed
+{
+    [self payWithOrder:aOrder localSign:YES success:success failed:failed];
 }
 
 
@@ -127,11 +158,22 @@
     if ([[result objectForKey:@"resultStatus"] integerValue] == 9000) {
         //成功，发起通知
         [[NSNotificationCenter defaultCenter] postNotificationName:AlipaySuccessedNotificationName object:self];
+        
+        if (self.successHandler) {
+            self.successHandler();
+        }
     }else{
         //失败，发起通知，并且弹出alert提示
         [[NSNotificationCenter defaultCenter] postNotificationName:AlipayFailedNotificationName object:self];
         [self alipayResultAlert:result];
+        
+        if (self.failedHandler) {
+            self.failedHandler();
+        }
     }
+    
+    self.successHandler = nil;
+    self.failedHandler = nil;
 }
 
 - (void)alipayResultAlert:(NSDictionary *)result
